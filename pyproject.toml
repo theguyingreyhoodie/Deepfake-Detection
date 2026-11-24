@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deepfake-detector"
+version = "0.1.0"
+description = "Face-manipulation deepfake detection for images and videos (CLIP ViT-L/14 with LayerNorm tuning)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "torch>=2.3", "torchvision>=0.18", "transformers>=4.44", "safetensors>=0.4", "huggingface_hub>=0.24",
+  "onnxruntime>=1.18", "opencv-python-headless>=4.9", "numpy>=1.26", "pandas>=2.1", "pyarrow>=15",
+  "scikit-learn>=1.4",
+]
+
+[project.optional-dependencies]
+app = ["gradio>=4.40", "matplotlib>=3.8"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+deepfake-detect = "deepfake_detector.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["deepfake_detector*"]
+
+[tool.setuptools.package-data]
+deepfake_detector = ["splits/*.json"]
