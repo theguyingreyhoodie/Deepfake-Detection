@@ -130,8 +130,10 @@ def build_ui() -> gr.Blocks:
                 with gr.Column():
                     v_out = gr.HTML()
                     v_plot = gr.Plot(label="Fake probability per frame")
-            v_key = gr.Image(label="Most suspicious frame")
-            v_gal = gr.Gallery(label="Face crops (left) and heatmaps (right), most suspicious first", columns=2)
+            with gr.Row():
+                v_key = gr.Image(label="Most suspicious frame", height=360)
+                v_gal = gr.Gallery(label="Face crops (left) and heatmaps (right), most suspicious first",
+                                   columns=2, height=360, object_fit="contain")
             v_btn.click(analyze_video, [v_in, v_frames], [v_out, v_plot, v_key, v_gal])
         with gr.Tab("Image"):
             with gr.Row():
@@ -140,8 +142,8 @@ def build_ui() -> gr.Blocks:
                     i_btn = gr.Button("Analyse image", variant="primary")
                 with gr.Column():
                     i_out = gr.HTML()
-                    i_img = gr.Image(label="Detected faces")
-            i_gal = gr.Gallery(label="Face crops (left) and heatmaps (right)", columns=2)
+                    i_img = gr.Image(label="Detected faces", height=360)
+            i_gal = gr.Gallery(label="Face crops (left) and heatmaps (right)", columns=4, height=260, object_fit="contain")
             i_btn.click(analyze_image, [i_in], [i_out, i_img, i_gal])
         gr.Markdown(model_card())
     return demo
