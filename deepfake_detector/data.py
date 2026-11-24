@@ -22,7 +22,11 @@ from .shards import ShardReader
 
 class CropDataset(Dataset):
     def __init__(self, index: pd.DataFrame, shard_paths: dict[str, str], transform=None):
-        self.shards = index["shard"].to_numpy()
+        # Shard names as small integer codes: a numpy array of a million Python strings would be
+        # slowly copied into every DataLoader worker (reference counting touches each object).
+        codes, names = pd.factorize(index["shard"])
+        self.shard_codes = codes.astype(np.int32)
+        self.shard_names = list(names)
         self.offsets = index["offset"].to_numpy(np.int64)
         self.lengths = index["length"].to_numpy(np.int64)
         self.labels = index["label"].to_numpy(np.int64)
@@ -33,7 +37,7 @@ class CropDataset(Dataset):
         return len(self.labels)
 
     def __getitem__(self, i: int):
-        data = self.reader.read(self.shards[i], self.offsets[i], self.lengths[i])
+        data = self.reader.read(self.shard_names[self.shard_codes[i]], self.offsets[i], self.lengths[i])
         img = decode_jpeg(torch.frombuffer(bytearray(data), dtype=torch.uint8))  # (3, H, W) RGB uint8
         if self.transform is not None:
             img = self.transform(img)
