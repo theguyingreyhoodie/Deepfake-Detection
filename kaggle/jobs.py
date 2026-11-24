@@ -95,7 +95,7 @@ JOBS["train-main"] = {
     "pip": "safetensors opencv-python-headless",
     "inputs": ALL_EXTRACTS,
     "commands": [
-        f"{TRAIN} --data /kaggle/input --out /kaggle/working/run --epochs 10 --samples-per-epoch 250000 "
+        f"{TRAIN} --data /kaggle/input --out /kaggle/working/run --epochs 9 --samples-per-epoch 250000 "
         "--micro-batch 32 --batch-size 128 --workers 3 --time-limit-hours 10.8 "
         "--dataset-weights '{\"DF40-img\": 0.5}'",
         f"{EVAL} --weights /kaggle/working/run/best.safetensors --out /kaggle/working/eval",
