@@ -58,6 +58,17 @@ JOBS["gpu-smoke"] = {
     ],
 }
 
+# DF40: modern one-shot face swaps (images, used for training and testing) and 500 videos of eight
+# modern swap / reenactment methods (testing only).
+JOBS["extract-df40img"] = {
+    "datasets": ["mdsahidkhan/df40-dataset"],
+    "commands": [f"{EXTRACT} --dataset DF40-img --prefix df40img --det-size 320"],
+}
+JOBS["extract-df40vid"] = {
+    "datasets": ["hafsanaz56/df40-fake-500"],
+    "commands": [f"{EXTRACT} --dataset DF40-vid --prefix df40vid"],
+}
+
 EVAL = "python -m deepfake_detector.evaluate --data /kaggle/input --splits val test --workers 4"
 
 # Pilot: reproduce the GenD setup (FF++ c23, 4 methods) and test on unseen datasets (Celeb-DF) and
@@ -75,7 +86,8 @@ JOBS["train-ffpp-pilot"] = {
 }
 
 ALL_EXTRACTS = ([f"extract-ffpp-{i}" for i in range(2)] + [f"extract-cdf-{i}" for i in range(2)]
-                + [f"extract-dfd-{i}" for i in range(2)] + [f"extract-dfdc-{i}" for i in range(DFDC_SHARDS)])
+                + [f"extract-dfd-{i}" for i in range(2)] + [f"extract-dfdc-{i}" for i in range(DFDC_SHARDS)]
+                + ["extract-df40img", "extract-df40vid"])
 
 # Main model: every dataset, every method.
 JOBS["train-main"] = {

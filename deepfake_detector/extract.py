@@ -33,9 +33,10 @@ import pandas as pd
 from . import sources
 from .faces import SCRFD, Face, align_face, scrfd_model_path
 from .shards import ShardWriter
-from .video import read_frames
+from .video import IMAGE_EXTENSIONS, read_frames
 
-ADAPTERS = {"FF++": sources.faceforensics, "CDFv2": sources.celeb_df, "DFDC": sources.dfdc, "DFD": sources.dfd}
+ADAPTERS = {"FF++": sources.faceforensics, "CDFv2": sources.celeb_df, "DFDC": sources.dfdc, "DFD": sources.dfd,
+            "DF40-img": sources.df40_images, "DF40-vid": sources.df40_videos}
 META_COLUMNS = ["dataset", "method", "label", "video_id", "split", "group"]
 
 _detector: SCRFD | None = None
@@ -64,7 +65,11 @@ def process_job(job: dict) -> tuple[dict, list[tuple[dict, bytes]], str | None]:
     crops: list[tuple[dict, bytes]] = []
     try:
         t0 = time.time()
-        frames = read_frames(job["path"], int(job["n_frames"]), threads=_decode_threads)
+        if os.path.splitext(job["path"])[1].lower() in IMAGE_EXTENSIONS:  # a still image is a one-frame video
+            image = cv2.imread(job["path"], cv2.IMREAD_COLOR)
+            frames = [(0, image)] if image is not None else []
+        else:
+            frames = read_frames(job["path"], int(job["n_frames"]), threads=_decode_threads)
         t_decode = time.time() - t0
         for idx, frame in frames:
             faces = _detector.detect(frame)

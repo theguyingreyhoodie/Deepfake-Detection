@@ -181,3 +181,58 @@ def frames_per_video(jobs: pd.DataFrame, train_fake: int, train_real: int, eval_
     n[train & (jobs["label"] == 1)] = train_fake
     n[train & (jobs["label"] == 0)] = train_real
     return n
+
+
+# ---------------------------------------------------------------------------------------------
+# DF40 (NeurIPS 2024) face-swap images: nine modern one-shot swappers (BlendFace, e4s, FaceDancer,
+# FaceSwap, FSGAN, InSwapper, MobileSwap, SimSwap, UniFace) applied to FaceForensics++ videos, plus
+# real FF++ frames, as 256 x 256 face crops (Kaggle copy with a manifest.csv).
+# The copy's own train/test split mixes FF++ test videos into training, so it is ignored: every image
+# is re-assigned to the official FF++ split of the video it came from, keeping FF++ test scenes
+# out of training entirely.
+# ---------------------------------------------------------------------------------------------
+def df40_images(root: str | Path) -> pd.DataFrame:
+    base = find_dir(root, ["manifest.csv"])
+    if base is None:
+        raise FileNotFoundError(f"DF40 image manifest not found under {root}")
+    split_of: dict[str, str] = {}
+    for split in ("train", "val", "test"):
+        for pair in json.load(open(SPLITS_DIR / f"ff_{split}.json")):
+            for x in pair:
+                split_of[x] = split
+    manifest = pd.read_csv(base / "manifest.csv")
+    rows = []
+    for r in manifest.itertuples():
+        parts = re.split(r"[\\/]", r.filepath)
+        rel = Path(*parts[parts.index("final_dataset") + 1:]) if "final_dataset" in parts else Path(*parts[-3:])
+        path = base / rel
+        if not path.exists():
+            continue
+        target = str(r.video_id).split("_")[0].zfill(3)
+        if target not in split_of:
+            continue
+        fake = r.label == "fake"
+        rows.append(dict(path=str(path), dataset="DF40-img", method=r.method if fake else "real", label=int(fake),
+                         video_id=f"{r.method}/{path.stem}", split=split_of[target], group=target))
+    return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------------------------------------
+# DF40 videos (Kaggle "DF40_FAKE_500"): 500 fake videos from 8 modern methods - face swapping
+# (FaceDancer, InSwapper, MobileSwap, SimSwap) and face reenactment / lip-sync (DaGAN, HyperReenact,
+# SadTalker, Wav2Lip). Fakes only, so they are used for testing only: how many are caught.
+# ---------------------------------------------------------------------------------------------
+def df40_videos(root: str | Path) -> pd.DataFrame:
+    meta_dir = find_dir(root, ["DF40_FAKE_500_metadata.csv"])
+    if meta_dir is None:
+        raise FileNotFoundError(f"DF40_FAKE_500 metadata not found under {root}")
+    meta = pd.read_csv(meta_dir / "DF40_FAKE_500_metadata.csv")
+    videos = {p.name: p for p in Path(meta_dir).rglob("*.mp4")}
+    rows = []
+    for r in meta.itertuples():
+        path = videos.get(r.output_filename)
+        if path is None:
+            continue
+        rows.append(dict(path=str(path), dataset="DF40-vid", method=r.method, label=1, video_id=r.sample_id,
+                         split="test", group=r.sample_id))
+    return pd.DataFrame(rows)
