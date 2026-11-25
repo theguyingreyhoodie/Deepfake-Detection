@@ -37,25 +37,39 @@ def verdict_markdown(r: Result) -> str:
     p = r.fake_probability
     label = "FAKE" if r.verdict == "FAKE" else "REAL"
     color = "#c62828" if label == "FAKE" else "#2e7d32"
-    what = "image" if r.kind == "image" else f"video ({r.frames_analyzed} frames sampled)"
+    n, f = len(r.faces), r.frames_analyzed
+    what = "image" if r.kind == "image" else f"video ({f} frame{'s' * (f != 1)} sampled)"
     return (f"<h2 style='color:{color};margin:0'>{label}</h2>"
             f"<p>Fake probability <b>{p:.1%}</b> (decision threshold {r.threshold:.1%}) for this {what}; "
-            f"{len(r.faces)} face crop(s) analysed.</p>")
+            f"{n} face crop{'s' * (n != 1)} analysed.</p>")
 
 
-def face_gallery(r: Result, limit: int = 8):
-    """Most suspicious crops first, each shown with its Grad-CAM heatmap."""
+def face_pairs(r: Result, limit: int) -> list:
+    """Most suspicious faces first, each as (face, its crop beside its Grad-CAM heatmap)."""
     faces = sorted(r.faces, key=lambda f: f.fake_probability, reverse=True)[:limit]
     if not faces:
         return []
     crops = np.stack([f.crop for f in faces])
     x = normalize(torch.from_numpy(crops).permute(0, 3, 1, 2).to(DETECTOR.device))
     heat = gradcam(DETECTOR.model, x)
-    items = []
-    for f, h in zip(faces, heat):
-        side = np.concatenate([f.crop, overlay(f.crop, h)], axis=1)
-        items.append((side, f"frame {f.frame_index}: fake {f.fake_probability:.1%}"))
-    return items
+    return [(f, np.concatenate([f.crop, overlay(f.crop, h)], axis=1)) for f, h in zip(faces, heat)]
+
+
+def face_gallery(r: Result, limit: int = 8) -> list:
+    """Video tab: crop and heatmap pairs, captioned with their frame and score."""
+    return [(side, f"frame {f.frame_index}: fake {f.fake_probability:.1%}") for f, side in face_pairs(r, limit)]
+
+
+def face_sheet(r: Result, limit: int = 4) -> np.ndarray | None:
+    """Image tab: the crop and heatmap pairs stacked into one picture, each under a caption. (Gradio's
+    gallery gives a lone item a full-width square cell, which pushes a single face out of view.)"""
+    rows = []
+    for k, (f, side) in enumerate(face_pairs(r, limit), 1):
+        bar = np.full((30, side.shape[1], 3), 255, np.uint8)
+        cv2.putText(bar, f"face {k}: fake {f.fake_probability:.1%}", (8, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                    (40, 40, 40), 1, cv2.LINE_AA)
+        rows.append(np.concatenate([bar, side], axis=0))
+    return np.concatenate(rows, axis=0) if rows else None
 
 
 def annotate(frame_bgr: np.ndarray, r: Result, frame_index: int) -> np.ndarray:
@@ -75,12 +89,12 @@ def annotate(frame_bgr: np.ndarray, r: Result, frame_index: int) -> np.ndarray:
 
 def analyze_image(path):
     if not path:
-        return "Upload an image first.", None, []
+        return "Upload an image first.", None, None
     frame = cv2.imread(path, cv2.IMREAD_COLOR)
     if frame is None:
-        return "Could not read that image.", None, []
+        return "Could not read that image.", None, None
     r = DETECTOR.analyze_image(frame, keep_crops=True)
-    return verdict_markdown(r), annotate(frame, r, 0), face_gallery(r)
+    return verdict_markdown(r), annotate(frame, r, 0), face_sheet(r)
 
 
 def analyze_video(path, n_frames):
@@ -95,10 +109,10 @@ def analyze_video(path, n_frames):
         idx, scores = zip(*r.frame_scores)
         ax.plot(idx, scores, marker="o", lw=1.5, color="#5b5bd6")
     ax.axhline(r.threshold, color="#c62828", ls="--", lw=1, label="decision threshold")
-    ax.set_ylim(0, 1)
+    ax.set_ylim(-0.03, 1.03)  # keep points at 0 and 1 off the frame
     ax.set_xlabel("frame")
     ax.set_ylabel("fake probability")
-    ax.legend(loc="upper right", fontsize=8)
+    ax.legend(loc="lower right", bbox_to_anchor=(1, 1), frameon=False, fontsize=8)  # above the plot, off the data
     fig.tight_layout()
     # show the frame whose most suspicious face scored highest
     key = max(r.frame_scores, key=lambda t: t[1])[0] if r.frame_scores else frames[0][0]
@@ -108,7 +122,11 @@ def analyze_video(path, n_frames):
 
 def model_card() -> str:
     metrics = ROOT / "results" / "summary.json"
-    text = f"Weights: `{DETECTOR_WEIGHTS}` · device: `{DETECTOR.device}` · threshold {DETECTOR.threshold:.3f}"
+    try:  # show the weights file relative to the repository, not the full local path
+        weights = Path(DETECTOR_WEIGHTS).resolve().relative_to(ROOT)
+    except ValueError:
+        weights = DETECTOR_WEIGHTS if DETECTOR_WEIGHTS == "gend" else Path(DETECTOR_WEIGHTS).name
+    text = f"Weights: `{weights}` · device: `{DETECTOR.device}` · threshold {DETECTOR.threshold:.3f}"
     if metrics.exists():
         s = json.loads(metrics.read_text())
         rows = " · ".join(f"{k} {v:.1%}" for k, v in s.get("test_video_auc", {}).items())
@@ -143,7 +161,7 @@ def build_ui() -> gr.Blocks:
                 with gr.Column():
                     i_out = gr.HTML()
                     i_img = gr.Image(label="Detected faces", height=360)
-            i_gal = gr.Gallery(label="Face crops (left) and heatmaps (right)", columns=4, height=260, object_fit="contain")
+            i_gal = gr.Image(label="Face crops (left) and heatmaps (right), most suspicious first", height=360)
             i_btn.click(analyze_image, [i_in], [i_out, i_img, i_gal])
         gr.Markdown(model_card())
     return demo
