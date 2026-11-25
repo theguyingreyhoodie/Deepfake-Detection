@@ -1,0 +1,112 @@
+{
+ "sources": {
+  "CDFv2": {
+   "real": 890,
+   "fake": 5639,
+   "splits": {
+    "train": 5204,
+    "val": 807,
+    "test": 518
+   },
+   "train_crops": 185836,
+   "fake_methods": [
+    "faceswap"
+   ]
+  },
+  "DF40-img": {
+   "real": 10000,
+   "fake": 9990,
+   "splits": {
+    "train": 16440,
+    "val": 1860,
+    "test": 1690
+   },
+   "train_crops": 16386,
+   "fake_methods": [
+    "blendface",
+    "e4s",
+    "facedancer",
+    "faceswap",
+    "fsgan",
+    "inswap",
+    "mobileswap",
+    "simswap",
+    "uniface"
+   ]
+  },
+  "DF40-vid": {
+   "real": 0,
+   "fake": 500,
+   "splits": {
+    "train": 0,
+    "val": 0,
+    "test": 500
+   },
+   "train_crops": 0,
+   "fake_methods": [
+    "dagan",
+    "facedancer",
+    "hyperreenact",
+    "inswap",
+    "mobileswap",
+    "sadtalker",
+    "simswap",
+    "wav2lip"
+   ]
+  },
+  "DFD": {
+   "real": 363,
+   "fake": 3068,
+   "splits": {
+    "train": 2280,
+    "val": 362,
+    "test": 789
+   },
+   "train_crops": 53762,
+   "fake_methods": [
+    "dfd_fake"
+   ]
+  },
+  "DFDC": {
+   "real": 2512,
+   "fake": 17397,
+   "splits": {
+    "train": 16357,
+    "val": 1816,
+    "test": 1736
+   },
+   "train_crops": 283371,
+   "fake_methods": [
+    "dfdc_fake"
+   ]
+  },
+  "FF++": {
+   "real": 1000,
+   "fake": 5000,
+   "splits": {
+    "train": 4320,
+    "val": 840,
+    "test": 840
+   },
+   "train_crops": 159161,
+   "fake_methods": [
+    "Deepfakes",
+    "Face2Face",
+    "FaceShifter",
+    "FaceSwap",
+    "NeuralTextures"
+   ]
+  }
+ },
+ "shared_faces": {
+  "CDFv2": {
+   "test_people": 56,
+   "test_people_in_training": 56
+  },
+  "DFD": {
+   "test_fakes": 704,
+   "test_fakes_with_training_face": 442,
+   "training_fakes_with_test_face": 417
+  }
+ }
+}

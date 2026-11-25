@@ -4,7 +4,8 @@ Each job is a self-contained Python script: the ``deepfake_detector`` package is
 in it (base64), so a job always runs exactly the code that was on disk when it was pushed.
 Inputs are Kaggle datasets (raw videos) or the outputs of earlier jobs (face-crop shards, checkpoints),
 which Kaggle mounts read-only under /kaggle/input; outputs are whatever the job writes to
-/kaggle/working.
+/kaggle/working. Jobs run under the Kaggle account named by the KAGGLE_USER environment variable
+(the Kaggle CLI must be signed in to that account).
 
     python kaggle/launch.py push extract-ffpp      # start a job
     python kaggle/launch.py status                 # status of every job
@@ -18,6 +19,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import os
 import re
 import subprocess
 import sys
@@ -28,7 +30,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build" / "kaggle"
 KAGGLE = str(ROOT / ".venv" / "bin" / "kaggle")
-USER = "your-kaggle-username"
+USER = os.environ.get("KAGGLE_USER") or sys.exit("Set KAGGLE_USER to your Kaggle username.")
 PREFIX = "dfd-"
 
 sys.path.insert(0, str(Path(__file__).parent))

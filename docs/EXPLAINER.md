@@ -74,8 +74,8 @@ best balanced accuracy, and stored inside the weights file.
 | Source | Used for | Split rule |
 |---|---|---|
 | FaceForensics++ c23 | train / val / test | the official 720 / 140 / 140 video split |
-| Celeb-DF v2 | train / val / test | official 518-video test list; the rest split by person |
-| DFD (Google) | train / val / test | by actor: 19 train, 3 val, 6 test |
+| Celeb-DF v2 | train / val / test | official 518-video test list; the rest split by person (the official list holds out videos, not people: its celebrities also appear in the other videos) |
+| DFD (Google) | train / val / test | by the actor whose video was manipulated: 19 train, 3 val, 6 test (the pasted face can belong to an actor on the other side) |
 | DFDC parts 0–9 | train / val / test | whole recording batches: parts 0–7 train, 8 val, 9 test |
 | DF40 face-swap images | train / val / test | by the FaceForensics++ video each image came from (the Kaggle copy's own split put FF++ test videos into training, so it was ignored) |
 | DF40 fake videos | test only | reenactment methods never used in training |
@@ -117,10 +117,13 @@ manipulation traces, not on one dataset's sharpness or compression level.
 ## 6. Experiments
 
 1. **Pilot (reproduction).** The GenD setup alone (FF++, four methods) to check the implementation, then
-   tested on Celeb-DF (unseen dataset) and FaceShifter (unseen method), side by side with the authors'
-   released model.
+   tested on FaceShifter (unseen method) and on every other dataset (all unseen for it), side by side with
+   the authors' released model.
 2. **Main model.** All sources together; tested on every dataset's held-out test split.
 3. **Unseen methods.** DF40 videos from four reenactment / lip-sync methods that no training set contains.
+
+The main model, the pilot and the authors' model are all scored in one final job on the same evaluation
+crops, so every comparison in the README is like for like.
 
 ## 7. Questions to expect
 
@@ -141,6 +144,16 @@ and the real skin, hair and jaw is one of the strongest cues, so it must be insi
 **How do you know the test results are not inflated?** Official or identity-based splits; whole DFDC
 recording batches held out; DF40 re-split by FF++ source video; threshold and model chosen on validation;
 evaluation crops independent of labels; unseen datasets and methods reported separately.
+
+**Do test videos show people the model saw in training?** For FaceForensics++ and the DF40 images, no:
+both people involved in every fake are on the same side of the split. For two datasets, partly, and the
+README counts it: Celeb-DF's official test list shares its celebrities with the other Celeb-DF videos, and
+a DFD fake is assigned to the actor whose video was manipulated while the pasted face often belongs to
+another actor. DFDC has no actor labels, so shared actors cannot be ruled out. Those in-domain numbers are
+therefore optimistic. The honest tests of generalisation are the ones where the data really is new: the
+DF40 reenactment videos (methods in no training set) and the FF++-only pilot scored on the other datasets.
+A stricter split (dropping every fake whose two people fall on different sides) would remove a large
+share of DFD's fakes and needs a new training run.
 
 **Why does the score sometimes disagree with a human?** Heavy compression, very small faces, extreme pose
 and occlusion remove the traces the model relies on. The score is evidence, not proof.

@@ -135,14 +135,24 @@ for shard in range(4):
 _eval_job("extract-eval-df40img", "mdsahidkhan/df40-dataset", "--dataset DF40-img --prefix edf40img --det-size 320")
 _eval_job("extract-eval-df40vid", "hafsanaz56/df40-fake-500", "--dataset DF40-vid --prefix edf40vid")
 
-# Final evaluation: our best checkpoint (from train-main's output) and the GenD baseline, scored on the
-# label-independent evaluation crops.
+def _checkpoint_eval(job: str, out: str) -> str:
+    """Evaluate the best checkpoint saved by an earlier training job. Kaggle mounts each input job's
+    output in a folder named after that job; if the checkpoint is not there, list what is mounted and stop."""
+    return (f"W=$(find /kaggle/input -path '*{job}/*' -name best.safetensors | head -1); "
+            "if [ -z \"$W\" ]; then find /kaggle/input -maxdepth 4 -type d | head -60; exit 1; fi; "
+            f"echo \"weights: $W\"; {EVAL} --weights \"$W\" --out /kaggle/working/{out}")
+
+
+# Final evaluation on the label-independent evaluation crops. Three models scored on identical crops:
+# our main model (train-main's best checkpoint), the GenD authors' released model, and our FF++-only
+# pilot, so that the reproduction check compares like with like.
 JOBS["eval-final"] = {
     "gpu": True,
     "pip": "safetensors opencv-python-headless",
-    "inputs": EVAL_EXTRACTS + ["train-main"],
+    "inputs": EVAL_EXTRACTS + ["train-main", "train-ffpp-pilot"],
     "commands": [
-        f"{EVAL} --weights $(find /kaggle/input -path '*run/best.safetensors' | head -1) --out /kaggle/working/eval_ours",
+        _checkpoint_eval("train-main", "eval_ours"),
         f"{EVAL} --weights gend --out /kaggle/working/eval_gend",
+        _checkpoint_eval("train-ffpp-pilot", "eval_pilot"),
     ],
 }
