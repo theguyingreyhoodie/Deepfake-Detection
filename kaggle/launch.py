@@ -10,6 +10,7 @@ which Kaggle mounts read-only under /kaggle/input; outputs are whatever the job 
     python kaggle/launch.py status                 # status of every job
     python kaggle/launch.py fetch extract-ffpp     # download its log and small outputs
     python kaggle/launch.py queue a b c            # start CPU jobs as concurrent-session slots free up
+    python kaggle/launch.py after x a b            # start job x once jobs a and b are complete
 """
 
 from __future__ import annotations
@@ -140,6 +141,24 @@ def queue(names: list[str], cpu_slots: int = 5, poll: int = 300) -> None:
     print("all queued jobs started", flush=True)
 
 
+def after(name: str, prerequisites: list[str], poll: int = 600) -> None:
+    """Push ``name`` once every prerequisite job is COMPLETE; give up if one fails."""
+    waiting = set(prerequisites)
+    while waiting:
+        for job in sorted(waiting):
+            st = job_status(job)
+            if st == "COMPLETE":
+                waiting.discard(job)
+                print(time.strftime("%H:%M"), job, "complete", flush=True)
+            elif st in ("ERROR", "CANCEL_ACKNOWLEDGED", "CANCEL_REQUESTED"):
+                print(time.strftime("%H:%M"), job, st, "- not starting", name, flush=True)
+                return
+            time.sleep(2)
+        if waiting:
+            time.sleep(poll)
+    push(name)
+
+
 def fetch(name: str, pattern: str = "") -> Path:
     out = ROOT / "build" / "outputs" / name
     out.mkdir(parents=True, exist_ok=True)
@@ -168,6 +187,8 @@ if __name__ == "__main__":
         status(rest)
     elif action == "queue":
         queue(rest)
+    elif action == "after":  # after JOB PREREQ1 PREREQ2 ...
+        after(rest[0], rest[1:])
     elif action == "fetch":
         fetch(rest[0], rest[1] if len(rest) > 1 else "")
     else:
