@@ -68,6 +68,15 @@ def count(x: int) -> str:
     return f"{x:,}" if x else "–"
 
 
+def bold_best(values: list) -> list[str]:
+    """Format as percentages and bold the highest value (all of them when they tie at the shown precision)."""
+    shown = [pct(v) for v in values]
+    nums = [float(s) for s in shown if s != "–"]
+    if len(nums) < 2:
+        return shown
+    return [f"**{s}**" if s != "–" and float(s) == max(nums) else s for s in shown]
+
+
 def test_auc(m: dict, dataset: str, methods: list[str] | None = None) -> float | None:
     """Video-level test AUC on a dataset, or the mean over some of its manipulation methods."""
     t = m["test"]["at_0.5"].get(dataset)  # AUC does not depend on the threshold
@@ -90,12 +99,38 @@ def main_table(m: dict, gend: dict | None) -> str:
         if d not in t:
             continue
         v = t[d]["video"]
-        row = (f"| {NAMES[d]} | {v['n_real']:,} / {v['n_fake']:,} | **{pct(v.get('auc'))}** | "
+        auc = bold_best([v.get("auc"), test_auc(gend, d)] if gend else [v.get("auc")])
+        row = (f"| {NAMES[d]} | {v['n_real']:,} / {v['n_fake']:,} | {auc[0]} | "
                f"{pct(v['balanced_accuracy'])} | {pct(v['accuracy'])} | {pct(v.get('eer'))} |")
-        lines.append(row + (f" {pct(test_auc(gend, d))} |" if gend else ""))
-    mean = f"| **Mean of the test sets** | | **{pct(t['mean_video_auc'])}** | | | |"
-    lines.append(mean + (f" {pct(gend['test']['at_0.5']['mean_video_auc'])} |" if gend else ""))
+        lines.append(row + (f" {auc[1]} |" if gend else ""))
+    means = bold_best([t["mean_video_auc"]] + ([gend["test"]["at_0.5"]["mean_video_auc"]] if gend else []))
+    lines.append(f"| **Mean of the test sets** | | {means[0]} | | | |" + (f" {means[1]} |" if gend else ""))
     return "\n".join(lines)
+
+
+FFPP_WHAT = {"NeuralTextures": "a reenactment method that re-renders only the mouth region",
+             "Face2Face": "a reenactment method that transfers expressions and keeps the identity",
+             "Deepfakes": "an autoencoder face swap", "FaceSwap": "a graphics-based face swap",
+             "FaceShifter": "a GAN face swap"}
+
+
+def ffpp_note(m: dict, gend: dict | None) -> str:
+    """A sentence on FaceForensics++ when the released model, trained on it alone, scores higher there."""
+    ours, theirs = test_auc(m, "FF++"), test_auc(gend, "FF++") if gend else None
+    if ours is None or theirs is None or float(pct(theirs)) <= float(pct(ours)):
+        return ""
+    methods = m["test"]["at_0.5"]["FF++"].get("methods", {})
+    gaps = {x: test_auc(gend, "FF++", [x]) - test_auc(m, "FF++", [x]) for x in methods
+            if test_auc(gend, "FF++", [x]) is not None}
+    note = (f"On FaceForensics++, the one dataset the released GenD model was trained on, that model scores higher "
+            f"({pct(theirs)} vs. {pct(ours)}).")
+    if gaps:
+        x = max(gaps, key=gaps.get)
+        what = f", {FFPP_WHAT[x]}" if x in FFPP_WHAT else ""
+        note += (f" The largest gap is on {x}{what} ({pct(test_auc(gend, 'FF++', [x]))} vs. "
+                 f"{pct(test_auc(m, 'FF++', [x]))}; see the per-method table). FaceForensics++ is one of five datasets "
+                 "in this model's training mix, so each of its methods is a small share of the fakes it learned from.")
+    return note
 
 
 def frame_table(m: dict) -> str:
@@ -109,18 +144,20 @@ def frame_table(m: dict) -> str:
     return "\n".join(lines)
 
 
-def method_table(m: dict) -> str:
+def method_table(m: dict, gend: dict | None) -> str:
     """Datasets with several manipulation methods: each method's fakes against the dataset's real items."""
     t = m["test"]["at_val_threshold"]
-    lines = ["| Test set | Manipulation | Fakes | AUC (vs. the same real items) | Fakes caught |",
-             "|---|---|---|---|---|"]
+    head = "| Test set | Manipulation | Fakes | AUC (vs. the same real items) |"
+    head += (" GenD released model, AUC |" if gend else "") + " Caught by this model |"
+    lines = [head, "|" + "---|" * (head.count("|") - 1)]
     for d in DATASETS:
         methods = t.get(d, {}).get("methods", {})
         if len(methods) < 2:
             continue
         for method, v in sorted(methods.items()):
+            auc = bold_best([v.get("auc"), test_auc(gend, d, [method])] if gend else [v.get("auc")])
             lines.append(f"| {NAMES[d]} | {METHOD_NAMES.get(method, method)} | {v['n_fake']:,} | "
-                         f"{pct(v.get('auc'))} | {pct(v['fake_recall'])} |")
+                         + " | ".join(auc) + f" | {pct(v['fake_recall'])} |")
     return "\n".join(lines)
 
 
@@ -132,12 +169,10 @@ def unseen_table(models: list[tuple[str, dict]]) -> str:
     for meth in REENACTMENT:
         if meth not in first:
             continue
-        cells = []
-        for i, (_, m) in enumerate(models):
-            r = m["test"]["at_val_threshold"].get("DF40-vid", {}).get("methods", {}).get(meth, {}).get("fake_recall")
-            cells.append(f"**{pct(r)}**" if i == 0 else pct(r))
-        lines.append(f"| {METHOD_NAMES[meth]} | {first[meth]['n_fake']} | " + " | ".join(cells) + " |")
-    reals = [pct(m["test"]["at_val_threshold"]["ALL"]["video"]["real_recall"]) for _, m in models]
+        rates = [m["test"]["at_val_threshold"].get("DF40-vid", {}).get("methods", {}).get(meth, {}).get("fake_recall")
+                 for _, m in models]
+        lines.append(f"| {METHOD_NAMES[meth]} | {first[meth]['n_fake']} | " + " | ".join(bold_best(rates)) + " |")
+    reals = bold_best([m["test"]["at_val_threshold"]["ALL"]["video"]["real_recall"] for _, m in models])
     lines.append("| *For comparison: real test videos passed as real* | | " + " | ".join(reals) + " |")
     return "\n".join(lines)
 
@@ -158,10 +193,11 @@ def pilot_table(pilot: dict, gend: dict) -> str:
         if setting != "in-domain" and p is not None and g is not None:
             unseen["p"].append(p)
             unseen["g"].append(g)
-        lines.append(f"| {name} | {setting} | {pct(p)} | {pct(g)} |")
+        lines.append(f"| {name} | {setting} | " + " | ".join(bold_best([p, g])) + " |")
     if unseen["p"]:
         mean = lambda xs: sum(xs) / len(xs)  # noqa: E731
-        lines.append(f"| **Mean of the unseen sets** | | **{pct(mean(unseen['p']))}** | **{pct(mean(unseen['g']))}** |")
+        cells = bold_best([mean(unseen["p"]), mean(unseen["g"])])
+        lines.append("| **Mean of the unseen sets** | | " + " | ".join(cells) + " |")
     return "\n".join(lines)
 
 
@@ -338,11 +374,14 @@ def results_section(main_m, gend, pilot, history, summary, figure: bool) -> str:
     t = main_m["test"]["at_val_threshold"]
     parts = ["## Results", "",
              "Held-out **test** videos of each dataset, never used for training or for choosing the model. Each "
-             "video is scored from 32 frames. Accuracy, balanced accuracy and EER use the decision threshold chosen "
-             f"on validation videos ({main_m['threshold']:.3f}); AUC needs no threshold. The last column is the GenD "
-             "authors' released model, trained on FaceForensics++ only and scored on the same crops: for it, every "
-             "test set except FaceForensics++ is unseen, so the gap shows what training on the other datasets adds.",
+             "video is scored from 32 frames. Accuracy and balanced accuracy use the decision threshold chosen on "
+             f"validation videos ({main_m['threshold']:.3f}); AUC and EER do not depend on a chosen threshold. The "
+             "last column is the GenD authors' released model, trained on FaceForensics++ only and scored on the same "
+             "crops: for it, every test set except FaceForensics++ is unseen, so the gap shows what training on the "
+             "other datasets adds. In every comparison below, bold marks the best value in the row.",
              "", main_table(main_m, gend), ""]
+    if ffpp_note(main_m, gend):
+        parts += [ffpp_note(main_m, gend), ""]
     if summary:
         parts += [independence_note(summary["shared_faces"]), ""]
     if figure:
@@ -354,7 +393,7 @@ def results_section(main_m, gend, pilot, history, summary, figure: bool) -> str:
     parts += ["### Single images (one face crop at a time)", "",
               "The same test sets with every face crop scored on its own, as when checking a photo.", "",
               frame_table(main_m), "",
-              "### Per manipulation method", "", method_table(main_m), ""]
+              "### Per manipulation method", "", method_table(main_m, gend), ""]
     if "DF40-vid" in t:
         models = [("this model", main_m)] + [(n, m) for n, m in (("the pilot", pilot), ("GenD", gend)) if m]
         parts += ["### Deepfake methods that no training set contains", "",
