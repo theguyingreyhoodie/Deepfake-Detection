@@ -7,9 +7,12 @@ CPU cores with one face detector per worker process.
 Which faces are kept (``choose_faces``):
 * faces smaller than 40 px or with detector confidence below 0.6 are ignored;
 * in a REAL video every prominent face is genuine, so up to two faces are kept per frame;
-* in a FAKE video we do not know which face was swapped when two people are visible, so a frame is
-  kept only when one face clearly dominates (the second is under a quarter of its area). This avoids
-  labelling an untouched bystander's face as "fake".
+* in a FAKE *training* video we do not know which face was swapped when two people are visible, so a
+  frame is kept only when one face clearly dominates (the second is under a quarter of its area). This
+  avoids teaching the model that an untouched bystander's face is "fake".
+* validation and test videos never use the label: every prominent face is kept (up to two per frame),
+  exactly as the app does, and a video is scored by its most suspicious face in each frame. Otherwise
+  the hardest fakes (two people on screen) would silently drop out of the test set.
 
 Example (Kaggle)::
 
@@ -73,7 +76,9 @@ def process_job(job: dict) -> tuple[dict, list[tuple[dict, bytes]], str | None]:
         t_decode = time.time() - t0
         for idx, frame in frames:
             faces = _detector.detect(frame)
-            for k, face in enumerate(choose_faces(faces, int(job["label"]))):
+            # The label may shape TRAINING crops only; evaluation crops must not depend on it.
+            rule_label = int(job["label"]) if job["split"] == "train" else 0
+            for k, face in enumerate(choose_faces(faces, rule_label)):
                 crop = align_face(frame, face.landmarks, out_size=224)
                 ok, buf = cv2.imencode(".jpg", crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
                 if ok:
@@ -86,8 +91,10 @@ def process_job(job: dict) -> tuple[dict, list[tuple[dict, bytes]], str | None]:
 
 
 def build_jobs(dataset: str, root: str, train_fake: int, train_real: int, eval_frames: int,
-               shard: int = 0, num_shards: int = 1) -> pd.DataFrame:
+               shard: int = 0, num_shards: int = 1, splits: list[str] | None = None) -> pd.DataFrame:
     jobs = ADAPTERS[dataset](root)
+    if splits:
+        jobs = jobs[jobs["split"].isin(splits)]
     jobs["n_frames"] = sources.frames_per_video(jobs, train_fake, train_real, eval_frames)
     jobs = jobs.sort_values("video_id").reset_index(drop=True)
     if num_shards > 1:
@@ -153,12 +160,13 @@ def main(argv=None):
     p.add_argument("--eval-frames", type=int, default=32, help="frames per val/test video")
     p.add_argument("--shard", type=int, default=0)
     p.add_argument("--num-shards", type=int, default=1)
+    p.add_argument("--splits", nargs="*", default=None, help="only these splits (e.g. val test)")
     p.add_argument("--limit", type=int, default=0, help="debug: only the first N videos")
     p.add_argument("--time-budget-hours", type=float, default=11.0)
     args = p.parse_args(argv)
     prefix = args.prefix or f"{args.dataset.lower().replace('+', 'p')}{args.shard}"
     jobs = build_jobs(args.dataset, args.root, args.train_fake, args.train_real, args.eval_frames,
-                      args.shard, args.num_shards)
+                      args.shard, args.num_shards, args.splits)
     if args.limit:
         jobs = jobs.sample(n=min(args.limit, len(jobs)), random_state=0).reset_index(drop=True)
     print(f"{args.dataset}: {len(jobs)} videos to process, {int(jobs.n_frames.sum()):,} frames requested")

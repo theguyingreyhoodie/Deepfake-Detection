@@ -105,21 +105,32 @@ def job_status(name: str) -> str:
     return m.group(1) if m else "NOT_FOUND"
 
 
-def queue(names: list[str], cpu_slots: int = 5, poll: int = 120) -> None:
-    """Push CPU jobs one by one as Kaggle's concurrent-session limit allows (5 batch CPU sessions)."""
-    pending = list(names)
+def queue(names: list[str], cpu_slots: int = 5, poll: int = 300) -> None:
+    """Push CPU jobs as Kaggle's limit of 5 concurrent batch CPU sessions allows.
+
+    Only the jobs started here are polled (every ``poll`` seconds), keeping API traffic low;
+    Kaggle rate-limits accounts that poll too often.
+    """
+    pending, started, finished = list(names), [], set()
     while pending:
-        cpu_jobs = [n for n in JOBS if not JOBS[n].get("gpu")]
-        running = [n for n in cpu_jobs if job_status(n) in ("RUNNING", "QUEUED")]
-        free = cpu_slots - len(running)
+        running = 0
+        for name in started:
+            if name in finished:
+                continue
+            st = job_status(name)
+            if st in ("RUNNING", "QUEUED", "NOT_FOUND"):  # NOT_FOUND right after a push, or rate limited
+                running += 1
+            else:
+                finished.add(name)
+            time.sleep(2)
+        free = cpu_slots - running
         while free > 0 and pending:
             name = pending[0]
-            out = build(name)
-            r = subprocess.run([KAGGLE, "kernels", "push", "-p", str(out)], capture_output=True, text=True)
+            r = subprocess.run([KAGGLE, "kernels", "push", "-p", str(build(name))], capture_output=True, text=True)
             text = (r.stdout + r.stderr).strip()
             if "successfully pushed" in text:
                 print(time.strftime("%H:%M"), "started", name, flush=True)
-                pending.pop(0)
+                started.append(pending.pop(0))
                 free -= 1
             else:
                 print(time.strftime("%H:%M"), "could not start", name, "-", text[-120:], flush=True)

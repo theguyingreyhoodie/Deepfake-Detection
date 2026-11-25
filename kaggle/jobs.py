@@ -109,3 +109,40 @@ JOBS["eval-gend"] = {
     "inputs": ALL_EXTRACTS,
     "commands": [f"{EVAL} --weights gend --out /kaggle/working/eval_gend"],
 }
+
+
+# ---- Evaluation crops, label-independent face selection (see extract.py) -------------------------
+# Validation and test videos re-extracted so that every prominent face is kept whatever the label,
+# as in the app. The final evaluation reads only these crops.
+EVAL_EXTRACTS = []
+
+
+def _eval_job(name, dataset_ref, flags):
+    JOBS[name] = {"datasets": [dataset_ref],
+                  "commands": [f"{EXTRACT} --splits val test {flags}"]}
+    EVAL_EXTRACTS.append(name)
+
+
+for shard in range(2):
+    _eval_job(f"extract-eval-ffpp-{shard}", FFPP,
+              f"--dataset FF++ --prefix effpp{shard} --shard {shard} --num-shards 2 --det-size 320")
+    _eval_job(f"extract-eval-dfd-{shard}", DFD,
+              f"--dataset DFD --prefix edfd{shard} --shard {shard} --num-shards 2")
+_eval_job("extract-eval-cdf", CDF, "--dataset CDFv2 --prefix ecdf --det-size 320")
+for shard in range(4):
+    _eval_job(f"extract-eval-dfdc-{shard}", DFDC10,
+              f"--dataset DFDC --prefix edfdc{shard} --shard {shard} --num-shards 4")
+_eval_job("extract-eval-df40img", "mdsahidkhan/df40-dataset", "--dataset DF40-img --prefix edf40img --det-size 320")
+_eval_job("extract-eval-df40vid", "hafsanaz56/df40-fake-500", "--dataset DF40-vid --prefix edf40vid")
+
+# Final evaluation: our best checkpoint (from train-main's output) and the GenD baseline, scored on the
+# label-independent evaluation crops.
+JOBS["eval-final"] = {
+    "gpu": True,
+    "pip": "safetensors opencv-python-headless",
+    "inputs": EVAL_EXTRACTS + ["train-main"],
+    "commands": [
+        f"{EVAL} --weights $(find /kaggle/input -path '*run/best.safetensors' | head -1) --out /kaggle/working/eval_ours",
+        f"{EVAL} --weights gend --out /kaggle/working/eval_gend",
+    ],
+}
