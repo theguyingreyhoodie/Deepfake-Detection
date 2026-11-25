@@ -17,7 +17,96 @@ images or videos (text-to-image, text-to-video, GAN faces of people who do not e
 different problem and are not what this model was trained to recognise.
 
 <!-- RESULTS:START -->
-*Results are added here by `scripts/make_results.py` once the evaluation has run.*
+## Results
+
+Held-out **test** videos of each dataset, never used for training or for choosing the model. Each video is scored from 32 frames. Accuracy and balanced accuracy use the decision threshold chosen on validation videos (0.503); AUC and EER do not depend on a chosen threshold. The last column is the GenD authors' released model, trained on FaceForensics++ only and scored on the same crops: for it, every test set except FaceForensics++ is unseen, so the gap shows what training on the other datasets adds. In every comparison below, bold marks the best value in the row.
+
+| Test set | Videos (real / fake) | AUC | Balanced accuracy | Accuracy | EER | GenD released model, AUC |
+|---|---|---|---|---|---|---|
+| FaceForensics++ | 140 / 700 | 93.8 | 86.0 | 82.4 | 13.7 | **95.1** |
+| Celeb-DF v2 | 178 / 340 | **99.9** | 97.9 | 98.3 | 1.2 | 95.3 |
+| DFD (Google) | 85 / 704 | **99.1** | 97.7 | 95.9 | 3.6 | 97.0 |
+| DFDC | 288 / 1,448 | **98.9** | 94.3 | 95.8 | 5.2 | 96.8 |
+| DF40 face swaps (images) | 1,408 / 277 | **90.7** | 84.5 | 86.2 | 15.6 | 83.1 |
+| **Mean of the test sets** | | **96.5** | | | | 93.5 |
+
+On FaceForensics++, the one dataset the released GenD model was trained on, that model scores higher (95.1 vs. 93.8). The largest gap is on NeuralTextures, a reenactment method that re-renders only the mouth region (94.0 vs. 75.6; see the per-method table). FaceForensics++ is one of five datasets in this model's training mix, so each of its methods is a small share of the fakes it learned from.
+
+**How independent the test sets are.** FaceForensics++ and the DF40 images hold out whole source videos, with both people of every fake on the same side of the split. DFDC holds out whole recording batches; it has no actor labels, so the same paid actors may appear on both sides. Two datasets hold out videos rather than faces: all 56 people in Celeb-DF's official test list also appear in its other videos, and 442 of DFD's 704 test fakes carry the pasted face of a training actor (and 417 training fakes the face of a test actor). Their in-domain results are therefore optimistic. Methods the model has never seen are tested by the DF40 reenactment videos below, and datasets it has never seen by the FaceForensics++-only check.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="results/roc_test_dark.png">
+  <img alt="Video-level ROC curves of the three models on each test set" src="results/roc_test.png">
+</picture>
+
+### Single images (one face crop at a time)
+
+The same test sets with every face crop scored on its own, as when checking a photo.
+
+| Test set | Face crops (real / fake) | AUC | Balanced accuracy |
+|---|---|---|---|
+| FaceForensics++ | 4,631 / 23,131 | 90.3 | 83.7 |
+| Celeb-DF v2 | 5,691 / 10,893 | 99.2 | 95.1 |
+| DFD (Google) | 3,215 / 27,138 | 90.3 | 87.3 |
+| DFDC | 9,930 / 52,864 | 92.3 | 86.4 |
+| DF40 face swaps (images) | 1,408 / 277 | 90.7 | 84.5 |
+
+### Per manipulation method
+
+| Test set | Manipulation | Fakes | AUC (vs. the same real items) | GenD released model, AUC | Caught by this model |
+|---|---|---|---|---|---|
+| FaceForensics++ | Deepfakes | 140 | **99.8** | 99.5 | 98.6 |
+| FaceForensics++ | Face2Face | 140 | 95.0 | **97.8** | 80.7 |
+| FaceForensics++ | FaceShifter | 140 | **99.3** | 85.8 | 96.4 |
+| FaceForensics++ | FaceSwap | 140 | **99.1** | 98.4 | 96.4 |
+| FaceForensics++ | NeuralTextures | 140 | 75.6 | **94.0** | 30.7 |
+| DF40 face swaps (images) | InSwapper | 134 | **88.8** | 84.5 | 76.9 |
+| DF40 face swaps (images) | SimSwap | 143 | **92.6** | 81.8 | 86.7 |
+
+### Deepfake methods that no training set contains
+
+DF40 videos made with four face-reenactment and lip-sync methods that appear in **no** training set. They are all fakes, so the table reports the share caught by each model at its own validation-chosen threshold. A lower threshold catches more fakes but also flags more real faces, so the last row gives the other side: the share of the real test videos of FaceForensics++, Celeb-DF, DFD and DFDC that the same threshold passes as real. (DF40's face-swap videos are left out: the same swap methods, and possibly the same footage, are in the DF40 training images.)
+
+| Method (in no training set) | Videos | Caught by this model | Caught by the pilot | Caught by GenD |
+|---|---|---|---|---|
+| DaGAN | 51 | 27.5 | 37.3 | **47.1** |
+| HyperReenact | 60 | **90.0** | 85.0 | 73.3 |
+| SadTalker | 65 | 12.3 | **15.4** | 10.8 |
+| Wav2Lip | 65 | 41.5 | 63.1 | **70.8** |
+| *For comparison: real test videos passed as real* | 691 real | **94.1** | 87.1 | 82.5 |
+
+### Reproduction check: trained on FaceForensics++ only
+
+Before the main run, the GenD setup was reproduced (FaceForensics++ c23, four methods, no other data) to check the implementation and to see how the recipe handles data it never saw. Both models below were trained on FaceForensics++ alone and are scored on the same crops; "the pilot" in the tables above is this re-implementation.
+
+| Test set | Setting | This re-implementation, AUC | GenD released model, AUC |
+|---|---|---|---|
+| FaceForensics++, the four training methods | in-domain | 97.2 | **97.4** |
+| FaceShifter (FaceForensics++ videos) | unseen method | **90.1** | 85.8 |
+| Celeb-DF v2 | unseen dataset | 94.5 | **95.3** |
+| DFD (Google) | unseen dataset | **97.1** | 97.0 |
+| DFDC | unseen dataset | **97.2** | 96.8 |
+| DF40 face swaps (images) | unseen methods | **84.0** | 83.1 |
+| **Mean of the unseen sets** | | **92.6** | 91.6 |
+
+<details>
+<summary>Validation AUC after each training epoch (the kept checkpoint is marked)</summary>
+
+Video-level AUC on a fixed sample of validation videos (up to 100 per dataset and manipulation, 8 face crops each), computed after every epoch to pick the checkpoint.
+
+| Epoch | FaceForensics++ | Celeb-DF v2 | DFD (Google) | DFDC | DF40 face swaps (images) | Mean |
+|---|---|---|---|---|---|---|
+| 1 | 88.1 | 99.5 | 99.4 | 96.8 | 85.1 | 93.8 |
+| 2 | 91.8 | 99.9 | 99.9 | 97.4 | 90.7 | 96.0 |
+| 3 | 93.1 | 99.8 | 100.0 | 97.9 | 91.1 | 96.4 |
+| 4 | 93.8 | 99.6 | 100.0 | 97.4 | 91.1 | 96.4 |
+| 5 | 94.3 | 99.7 | 100.0 | 97.8 | 90.8 | 96.5 |
+| 6 | 94.4 | 99.6 | 100.0 | 98.1 | 90.7 | 96.5 |
+| 7 | 94.6 | 99.6 | 100.0 | 98.0 | 90.9 | 96.6 |
+| **8 (kept)** | 94.6 | 99.5 | 100.0 | 98.0 | 91.0 | 96.6 |
+| 9 | 94.6 | 99.5 | 100.0 | 97.9 | 91.0 | 96.6 |
+
+</details>
 <!-- RESULTS:END -->
 
 ## How it works
