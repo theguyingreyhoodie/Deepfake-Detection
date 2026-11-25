@@ -21,6 +21,9 @@ different problem and are not what this model was trained to recognise.
 
 ## How it works
 
+A longer, step-by-step explanation (with the reasoning behind each design choice) is in
+[docs/EXPLAINER.md](docs/EXPLAINER.md).
+
 ```
 video ──► 32 evenly spaced frames ──► SCRFD face detector ──► 5 landmarks per face
                                                                     │
