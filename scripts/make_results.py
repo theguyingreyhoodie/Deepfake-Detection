@@ -57,7 +57,14 @@ THEMES = {
 
 
 def load(path: str | None) -> dict | None:
-    return json.loads((Path(path) / "metrics.json").read_text()) if path else None
+    """An evaluation's metrics. Its "weights" entry is shortened to the job folder and file name, because
+    the full path is a Kaggle mount point that names the account the job ran under."""
+    if not path:
+        return None
+    m = json.loads((Path(path) / "metrics.json").read_text())
+    if m.get("weights", "gend") != "gend":
+        m["weights"] = "/".join(Path(m["weights"]).parts[-3:])  # e.g. dfd-train-main/run/best.safetensors
+    return m
 
 
 def pct(x) -> str:
@@ -163,7 +170,7 @@ def method_table(m: dict, gend: dict | None) -> str:
 
 def unseen_table(models: list[tuple[str, dict]]) -> str:
     """DF40 fake videos from methods no training set contains; each model at its own validation threshold."""
-    head = "| Method (in no training set) | Fake videos | " + " | ".join(f"Caught by {n}" for n, _ in models) + " |"
+    head = "| Method (in no training set) | Videos | " + " | ".join(f"Caught by {n}" for n, _ in models) + " |"
     lines = [head, "|" + "---|" * (head.count("|") - 1)]
     first = models[0][1]["test"]["at_val_threshold"]["DF40-vid"]["methods"]
     for meth in REENACTMENT:
@@ -172,9 +179,25 @@ def unseen_table(models: list[tuple[str, dict]]) -> str:
         rates = [m["test"]["at_val_threshold"].get("DF40-vid", {}).get("methods", {}).get(meth, {}).get("fake_recall")
                  for _, m in models]
         lines.append(f"| {METHOD_NAMES[meth]} | {first[meth]['n_fake']} | " + " | ".join(bold_best(rates)) + " |")
-    reals = bold_best([m["test"]["at_val_threshold"]["ALL"]["video"]["real_recall"] for _, m in models])
-    lines.append("| *For comparison: real test videos passed as real* | | " + " | ".join(reals) + " |")
+    reals = bold_best([real_video_recall(m) for _, m in models])
+    lines.append(f"| *For comparison: real test videos passed as real* | {count(real_video_count(models[0][1]))} real | "
+                 + " | ".join(reals) + " |")
     return "\n".join(lines)
+
+
+VIDEO_SETS = [d for d in DATASETS if d != "DF40-img"]  # test sets whose real items are videos
+
+
+def real_video_count(m: dict) -> int:
+    return sum(m["test"]["at_val_threshold"][d]["video"]["n_real"] for d in VIDEO_SETS)
+
+
+def real_video_recall(m: dict) -> float:
+    """Share of the real test videos scored below the threshold. The DF40 real items are still images, so
+    they are left out: the fakes this is compared with are all videos."""
+    t = m["test"]["at_val_threshold"]
+    passed = sum(round(t[d]["video"]["real_recall"] * t[d]["video"]["n_real"]) for d in VIDEO_SETS)
+    return passed / real_video_count(m)
 
 
 def pilot_table(pilot: dict, gend: dict) -> str:
@@ -400,7 +423,9 @@ def results_section(main_m, gend, pilot, history, summary, figure: bool) -> str:
         parts += ["### Deepfake methods that no training set contains", "",
                   "DF40 videos made with four face-reenactment and lip-sync methods that appear in **no** training set. "
                   "They are all fakes, so the table reports the share caught by each model at its own "
-                  "validation-chosen threshold; the last row shows the price of that threshold on real videos. "
+                  "validation-chosen threshold. A lower threshold catches more fakes but also flags more real "
+                  "faces, so the last row gives the other side: the share of the real test videos of "
+                  "FaceForensics++, Celeb-DF, DFD and DFDC that the same threshold passes as real. "
                   "(DF40's face-swap videos are left out: the same swap methods, and possibly the same footage, "
                   "are in the DF40 training images.)", "", unseen_table(models), ""]
     if pilot and gend:
