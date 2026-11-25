@@ -101,3 +101,11 @@ JOBS["train-main"] = {
         f"{EVAL} --weights /kaggle/working/run/best.safetensors --out /kaggle/working/eval",
     ],
 }
+
+# The GenD authors' released model (FF++ only), scored on exactly the same val/test crops as ours.
+JOBS["eval-gend"] = {
+    "gpu": True,
+    "pip": "safetensors opencv-python-headless",
+    "inputs": ALL_EXTRACTS,
+    "commands": [f"{EVAL} --weights gend --out /kaggle/working/eval_gend"],
+}
