@@ -343,7 +343,7 @@ def roc_figure(models: list[tuple[str, str, dict, Path]], out: Path, theme: dict
     for ax in axes[len(sets):]:
         ax.axis("off")
     key = axes[len(sets)]
-    key.text(0.02, 0.95, "Test sets (DF40: single images)", color=theme["ink"], fontsize=10,
+    key.text(0.02, 0.95, "Models", color=theme["ink"], fontsize=10,
              va="top", transform=key.transAxes)
     y = 0.80
     for (short, long, _, _), color in zip(models, theme["series"]):
@@ -352,7 +352,8 @@ def roc_figure(models: list[tuple[str, str, dict, Path]], out: Path, theme: dict
         key.text(0.16, y, short, color=theme["ink"], fontsize=9, va="top", transform=key.transAxes)
         key.text(0.16, y - 0.075, long, color=theme["ink2"], fontsize=8, va="top", transform=key.transAxes)
         y -= 0.2
-    key.text(0.02, y - 0.02, "Further up and to the left is better;\nthe dashed line is guessing.",
+    key.text(0.02, y - 0.02, "Further up and to the left is better;\nthe dashed line is guessing.\n"
+             "The DF40 panel counts single images.",
              color=theme["ink2"], fontsize=8, va="top", transform=key.transAxes, linespacing=1.4)
     fig.supxlabel("Real videos flagged as fake", color=theme["ink2"], fontsize=9)
     fig.supylabel("Fake videos caught", color=theme["ink2"], fontsize=9)
