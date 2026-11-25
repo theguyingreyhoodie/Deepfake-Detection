@@ -14,8 +14,12 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DATASETS = ["FF++", "CDFv2", "DFD", "DFDC"]
-NAMES = {"FF++": "FaceForensics++", "CDFv2": "Celeb-DF v2", "DFD": "DFD (Google)", "DFDC": "DFDC"}
+DATASETS = ["FF++", "CDFv2", "DFD", "DFDC", "DF40-img"]
+NAMES = {"FF++": "FaceForensics++", "CDFv2": "Celeb-DF v2", "DFD": "DFD (Google)", "DFDC": "DFDC",
+         "DF40-img": "DF40 face swaps (InSwapper, SimSwap) · images"}
+REENACTMENT = ["dagan", "hyperreenact", "sadtalker", "wav2lip"]
+METHOD_NAMES = {"dagan": "DaGAN", "hyperreenact": "HyperReenact", "sadtalker": "SadTalker", "wav2lip": "Wav2Lip",
+                "facedancer": "FaceDancer", "inswap": "InSwapper", "mobileswap": "MobileSwap", "simswap": "SimSwap"}
 
 
 def load(path: str | None) -> dict | None:
@@ -63,7 +67,25 @@ def method_table(m: dict) -> str:
              "|---|---|---|---|---|"]
     for d in DATASETS:
         for method, v in sorted(t.get(d, {}).get("methods", {}).items()):
-            lines.append(f"| {NAMES[d]} | {method} | {v['n_fake']:,} | {pct(v.get('auc'))} | {pct(v['fake_recall'])} |")
+            name = METHOD_NAMES.get(method, method)
+            lines.append(f"| {NAMES[d]} | {name} | {v['n_fake']:,} | {pct(v.get('auc'))} | {pct(v['fake_recall'])} |")
+    return "\n".join(lines)
+
+
+def unseen_table(m: dict, gend: dict | None) -> str:
+    """DF40 fake videos made by face-reenactment / lip-sync methods that no training set contains."""
+    t = m["test"]["at_val_threshold"].get("DF40-vid", {}).get("methods", {})
+    g = gend["test"]["at_val_threshold"].get("DF40-vid", {}).get("methods", {}) if gend else {}
+    head = "| Method (never seen in training) | Fake videos | Caught by this model |"
+    head += " Caught by GenD (FF++ only) |" if g else ""
+    lines = [head, "|" + "---|" * (head.count("|") - 1)]
+    for meth in REENACTMENT:
+        if meth not in t:
+            continue
+        row = f"| {METHOD_NAMES[meth]} | {t[meth]['n_fake']} | **{pct(t[meth]['fake_recall'])}** |"
+        if g:
+            row += f" {pct(g.get(meth, {}).get('fake_recall'))} |"
+        lines.append(row)
     return "\n".join(lines)
 
 
@@ -113,6 +135,13 @@ def main():
                   "", main_table(main_m, gend), "",
                   "### Single images (one face crop at a time)", "", frame_table(main_m), "",
                   "### Per manipulation method", "", method_table(main_m), ""]
+        if "DF40-vid" in t:
+            real_ok = t["ALL"]["video"]["real_recall"] if "ALL" in t else None
+            parts += ["### Unseen deepfake methods", "",
+                      "DF40 videos made with four face-reenactment and lip-sync methods that appear in **no** training "
+                      "set. They are all fakes, so the table reports how many are caught at the same validation-chosen "
+                      f"threshold. For context, that threshold passes {pct(real_ok)}% of all real test videos as real.",
+                      "", unseen_table(main_m, gend), ""]
     if pilot:
         parts += ["### Generalisation check: trained on FaceForensics++ only", "",
                   "Before the main run, the GenD setup was reproduced (FF++ c23, four methods, no other data) to "
