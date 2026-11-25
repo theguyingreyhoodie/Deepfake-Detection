@@ -1,7 +1,7 @@
 """Copy trained weights into weights/ with their provenance and the calibrated decision threshold.
 
     python scripts/package_weights.py build/outputs/train-main/run/best.safetensors \
-        build/outputs/train-main/eval/metrics.json weights/deepfake_detector.safetensors
+        build/outputs/eval-final/eval_ours/metrics.json weights/deepfake_detector.safetensors
 
 The threshold is the one evaluate.py picked on validation videos (maximum balanced accuracy); the app
 and the command line read it from the file's metadata.

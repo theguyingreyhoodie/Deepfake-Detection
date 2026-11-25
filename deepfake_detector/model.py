@@ -49,7 +49,16 @@ class DeepfakeClassifier(nn.Module):
         from transformers import CLIPVisionConfig, CLIPVisionModel
 
         if pretrained:
-            self.encoder = CLIPVisionModel.from_pretrained(backbone, attn_implementation="sdpa")
+            # The CLIP checkpoint also holds the text encoder, which is not used here. Leaving it out is
+            # intended, so the "unexpected keys" table transformers prints about it is muted.
+            from transformers.utils import logging as hf_logging
+
+            level = hf_logging.get_verbosity()
+            hf_logging.set_verbosity_error()
+            try:
+                self.encoder = CLIPVisionModel.from_pretrained(backbone, attn_implementation="sdpa")
+            finally:
+                hf_logging.set_verbosity(level)
         else:
             config = CLIPVisionConfig.from_pretrained(backbone)
             config._attn_implementation = "sdpa"

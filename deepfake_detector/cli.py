@@ -34,8 +34,9 @@ def main(argv=None) -> int:
                                   for f in r.faces]})
         if not args.json:
             prob = "n/a" if r.fake_probability is None else f"{r.fake_probability:.3f}"
+            faces, frames = len(r.faces), r.frames_analyzed
             print(f"{path}: {r.verdict}  (fake probability {prob}, threshold {r.threshold:.3f}, "
-                  f"{len(r.faces)} face crops from {r.frames_analyzed} frame(s))")
+                  f"{faces} face crop{'s' * (faces != 1)} from {frames} frame{'s' * (frames != 1)})")
     if args.json:
         print(json.dumps(results, indent=1))
     return 0
