@@ -102,9 +102,21 @@ class DeepfakeDetector:
         return np.concatenate(scores) if scores else np.zeros(0)
 
     def _faces(self, frame_bgr: np.ndarray, max_faces: int) -> list[Face]:
-        faces = [f for f in self.detector.detect(frame_bgr)
-                 if f.score >= 0.6 and min(f.box[2] - f.box[0], f.box[3] - f.box[1]) >= self.min_face]
-        return faces[:max_faces]
+        """Faces in a frame. If none is found at the normal detection size, retry smaller: a photo that is
+        already a tight face crop would otherwise be enlarged until the face is too big for the detector."""
+        default = self.detector.det_size
+        try:
+            for size in (default, 320, 160):
+                if size > default:
+                    continue
+                self.detector.det_size = size
+                faces = [f for f in self.detector.detect(frame_bgr)
+                         if f.score >= 0.6 and min(f.box[2] - f.box[0], f.box[3] - f.box[1]) >= self.min_face]
+                if faces:
+                    return faces[:max_faces]
+            return []
+        finally:
+            self.detector.det_size = default
 
     def analyze_frames(self, frames: list[tuple[int, np.ndarray]], kind: str, max_faces: int = 4,
                        keep_crops: bool = False) -> Result:
